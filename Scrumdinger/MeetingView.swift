@@ -3,44 +3,53 @@ See LICENSE folder for this sample’s licensing information.
 */
 
 import SwiftUI
+import AVFoundation
 
 struct MeetingView: View {
+    @Binding var scrum: DailyScrum
+    @StateObject var scrumTimer = ScrumTimer()
+    @State private var transcript = ""
+    @State private var isRecording = false
+    let speechRecognizer = SpeechRecognizer()
+    var player: AVPlayer = AVPlayer.sharedDingPlayer
+    
     var body: some View {
-        VStack {
-            ProgressView(value: 5, total: 15)
-            HStack {
-                VStack(alignment: .leading) {
-                    Text("Seconds Elapsed")
-                        .font(.caption)
-                    Label("300", systemImage: "hourglass.bottomhalf.fill")
-                }
-                Spacer()
-                VStack(alignment: .trailing) {
-                    Text("Seconds Remaining")
-                        .font(.caption)
-                    Label("600", systemImage: "hourglass.tophalf.fill")
-                }
+        ZStack {
+            RoundedRectangle(cornerRadius: 16.0)
+                .fill(scrum.color)
+            VStack {
+                ProgressView(value: 5, total: 15)
+                MeetingHeaderView(secondsElapsed: scrumTimer.secondsElapsed, secondRemaining: scrumTimer.secondsRemaining, scrumColor: scrum.color)
+                
+                MeetingTimerView(speakers: scrumTimer.speakers, scrumColor: scrum.color, isRecording: isRecording)
+                
+                MeetingFooterView(speakers: scrumTimer.speakers, skipAction: scrumTimer.skipSpeaker)
+                
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text("Time remaining"))
-            .accessibilityValue(Text("10 minutes"))
-            Circle()
-                .strokeBorder(lineWidth: 24, antialiased: true)
-            HStack {
-                Text("Speaker 1 of 3")
-                Spacer()
-                Button(action: {}) {
-                    Image(systemName:"forward.fill")
-                }
-                .accessibilityLabel(Text("Next speaker"))
+        }.padding()
+        .foregroundColor(scrum.color.accessibleFontColor)
+        .onAppear(perform: {
+            speechRecognizer.record(to: $transcript)
+            scrumTimer.reset(lengthInMinutes: scrum.lengthInMinutes, attendees: scrum.attendees)
+            scrumTimer.speakerChangedAction = {
+                player.seek(to: .zero)
+                player.play()
             }
-        }
-        .padding()
+            scrumTimer.startScrum()
+            isRecording = true
+        })
+        .onDisappear(perform: {
+            speechRecognizer.stopRecording()
+            scrumTimer.stopScrum()
+            let newHistory = History(attendees: scrum.attendees, lengthInMinutes: scrum.lengthInMinutes / 60, transcript: transcript)
+            scrum.history.append(newHistory)
+            isRecording = false
+        })
     }
 }
 
 struct MeetingView_Previews: PreviewProvider {
     static var previews: some View {
-        MeetingView()
+        MeetingView(scrum: .constant(DailyScrum.data[0]))
     }
 }
